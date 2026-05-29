@@ -1,0 +1,49 @@
+name: .NET Build & Validate
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: windows-latest  # WPF requires Windows
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 6.0.x
+
+      - name: Find and clean old build artifacts
+        run: |
+          Get-ChildItem -Path . -Recurse -Directory -Include "bin","obj","Debug","Release" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+        shell: pwsh
+
+      - name: Find project file
+        id: find_proj
+        run: |
+          $proj = Get-ChildItem -Recurse -Filter "*.csproj" | Select-Object -First 1
+          echo "PROJECT_PATH=$($proj.FullName)" >> $env:GITHUB_OUTPUT
+          echo "Found project: $($proj.FullName)"
+        shell: pwsh
+
+      - name: Restore dependencies
+        run: dotnet restore "${{ steps.find_proj.outputs.PROJECT_PATH }}"
+
+      - name: Build
+        run: dotnet build "${{ steps.find_proj.outputs.PROJECT_PATH }}" --no-restore --configuration Release
+
+      - name: Publish (create executable)
+        run: dotnet publish "${{ steps.find_proj.outputs.PROJECT_PATH }}" --no-build --configuration Release --output ./publish
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CyberBot-Build
+          path: ./publish
+          retention-days: 7
